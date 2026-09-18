@@ -1,0 +1,27 @@
+# Dependencias (se instalan dentro del contenedor)
+**/node_modules
+
+# Build del frontend (se genera dentro del contenedor)
+**/dist
+
+# Logs y entornos
+*.log
+.env
+.env.local
+
+# Sistema / SO
+.DS_Store
+Thumbs.db
+
+# Tests / cobertura
+coverage
+
+# Git y archivos de Docker (no van en el contexto de build)
+.git
+.gitignore
+Dockerfile
+.dockerignore
+docker-compose.yml
+
+# Documentación
+README.md

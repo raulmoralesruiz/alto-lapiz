@@ -1,0 +1,46 @@
+# Alto el Lápiz — producción con Docker Compose
+#
+# Opción 1 (juntos, recomendado si NO tienes llama.cpp):
+#   docker compose up --build -d
+#
+# Opción 2 (separados, si YA tienes llama.cpp corriendo en otra máquina):
+#   AI_URL=http://<ip-llamacpp>:9931 docker compose up --build -d alto-lapiz
+#   (solo se levanta el juego; apunta a tu llama.cpp externo)
+
+services:
+  alto-lapiz:
+    build: .
+    image: alto-lapiz:latest
+    ports:
+      - "22019:22019"      # web del juego (alternativa: 8080)
+    environment:
+      PORT: "22019"
+      HOST: "0.0.0.0"
+      AI_PROVIDER: "llamacpp"
+      # Opción 1: llama.cpp empaquetado. Opción 2: AI_URL=http://<ip>:9931
+      AI_URL: "${AI_URL:-http://llamacpp:9931}"
+      AI_MODEL: "${AI_MODEL:-llama3.2}"
+      AI_TEMPERATURE: "${AI_TEMPERATURE:-0.1}"
+      AI_TIMEOUT_MS: "${AI_TIMEOUT_MS:-30000}"
+      AI_CONCURRENCY: "${AI_CONCURRENCY:-2}"
+      AI_CONFIDENCE_THRESHOLD: "${AI_CONFIDENCE_THRESHOLD:-0.7}"
+      AI_MAX_RETRIES: "${AI_MAX_RETRIES:-1}"
+      LOG_LEVEL: "${LOG_LEVEL:-info}"
+      # ALLOWED_ORIGINS: "https://mi-dominio.com"
+    restart: unless-stopped
+
+  # llama.cpp empaquetado (Opción 1). Coloca un .gguf en ./models
+  llamacpp:
+    image: ghcr.io/ggml-org/llama.cpp:server
+    ports:
+      - "9931:9931"
+    volumes:
+      - ./models:/models
+    command:
+      - "-m"
+      - "${MODEL_PATH:-/models/llama-3.2-3b-instruct-q4_k_m.gguf}"
+      - "--port"
+      - "9931"
+      - "--ctx-size"
+      - "4096"
+    restart: unless-stopped
