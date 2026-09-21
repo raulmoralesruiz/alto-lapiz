@@ -70,6 +70,7 @@ export function useGame(): GameApi {
 
   const applyGame = useCallback((g: GameState, serverNow: number) => {
     setGame(g);
+    setAiStatus(g.aiStatus ?? null);
     setSkewMs(serverNow - Date.now());
   }, []);
 
@@ -80,6 +81,18 @@ export function useGame(): GameApi {
     setGame(null);
     setPlayerId(null);
     setError(null);
+  }, []);
+
+  const refreshAiStatus = useCallback(() => {
+    fetch('/api/ai/status')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d) return;
+        setAiStatus({ available: !!d.available, model: d.provider ?? d.model ?? null, error: d.error ?? null });
+      })
+      .catch(() => {
+        /* sin estado IA disponible */
+      });
   }, []);
 
   useEffect(() => {
@@ -120,6 +133,7 @@ export function useGame(): GameApi {
         sessionRef.current = session;
         saveSession(session);
         setError(null);
+        void refreshAiStatus();
       },
       onState: (g, serverNow) => applyGame(g, serverNow),
       onAiStatus: (status) => setAiStatus(status),
@@ -138,7 +152,7 @@ export function useGame(): GameApi {
       socket.close();
       socketRef.current = null;
     };
-  }, [applyGame, resetToHome]);
+  }, [applyGame, resetToHome, refreshAiStatus]);
 
   const send = useCallback((msg: C2SMessage) => {
     socketRef.current?.send(msg);

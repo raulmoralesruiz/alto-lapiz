@@ -27,6 +27,16 @@ export function Results({ game, playerId, onSend, onLeave }: ResultsProps) {
     .map((cat) => ({ cat, answers: round.answers.filter((a) => a.category === cat) }))
     .filter((g) => g.answers.length > 0);
 
+  const roundPoints = game.players
+    .map((p) => ({
+      id: p.id,
+      name: p.name,
+      isMe: p.id === playerId,
+      roundPts: round.answers.filter((a) => a.playerId === p.id).reduce((sum, a) => sum + (a.points || 0), 0),
+      total: p.score,
+    }))
+    .sort((a, b) => b.roundPts - a.roundPts || b.total - a.total);
+
   return (
     <div className="screen results">
       <div className="card">
@@ -51,6 +61,26 @@ export function Results({ game, playerId, onSend, onLeave }: ResultsProps) {
             </button>
           </div>
         </div>
+
+        <section className="result-group">
+          <h3 className="result-cat">Puntos de la ronda</h3>
+          <ul className="result-list">
+            {roundPoints.map((rp) => (
+              <li key={rp.id} className={`result-row ${rp.isMe ? 'me' : ''}`}>
+                <div className="result-main">
+                  <span className="result-player">
+                    {rp.name}
+                    {rp.isMe && <em> (tú)</em>}
+                  </span>
+                </div>
+                <div className="result-side">
+                  <span className="result-points">+{rp.roundPts}</span>
+                  <span className="result-total">Total: {rp.total}</span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
 
         {byCategory.length === 0 && <p className="hint">Nadie respondió esta ronda.</p>}
 

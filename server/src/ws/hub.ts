@@ -260,6 +260,19 @@ export class Hub {
         this.send(ctx.ws, { t: 'joined', playerId: msg.playerId, game: game.state, serverNow: Date.now() });
         return;
       }
+      case 'leave': {
+        const code = ctx.gameCode;
+        const playerId = ctx.playerId;
+        ctx.gameCode = null;
+        ctx.playerId = null;
+        ctx.name = '';
+        if (code && playerId) {
+          const game = this.games.get(code);
+          if (game) game.handleClientEvent({ t: 'leave' }, playerId);
+          this.log.info('player.left', { code, player: playerId });
+        }
+        return;
+      }
       default: {
         if (!ctx.gameCode) {
           this.sendError(ctx, 'not_joined', 'Primero crea o únete a una partida');

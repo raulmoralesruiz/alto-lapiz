@@ -8,13 +8,13 @@ interface HeaderProps {
 }
 
 export function Header({ code, connected, aiStatus, onLeave }: HeaderProps) {
-  const aiDot = aiStatus === null ? 'unknown' : aiStatus.available ? 'ok' : 'down';
-  const aiLabel =
-    aiStatus === null
-      ? 'IA: desconocido'
-      : aiStatus.available
-        ? `IA: ${aiStatus.model ?? 'disponible'}`
-        : 'IA no disponible';
+  const unknown = aiStatus === null || aiStatus.available === null;
+  const aiDot = unknown ? 'unknown' : aiStatus.available ? 'ok' : 'down';
+  const aiLabel = unknown
+    ? 'IA: desconocido'
+    : aiStatus.available
+      ? `IA: ${aiStatus.model ?? 'disponible'}`
+      : 'IA no disponible';
   return (
     <header className="header">
       <div className="header-brand">

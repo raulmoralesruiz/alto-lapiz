@@ -202,3 +202,61 @@ test('E2E: partida completa por WebSocket (crear, jugar, validar, puntuar, dispu
   assert.equal(scoreOf(sf, anaId), 30, `Ana final 30 (20 + 10 única), tiene ${scoreOf(sf, anaId)}`);
   assert.equal(scoreOf(sf, luisId), 30, `Luis final 30 (20 + 10 única), tiene ${scoreOf(sf, luisId)}`);
 });
+
+test('E2E: salir de una partida permite crear otra sin "ya estás en una partida"', async (t) => {
+  const provider = new FakeProvider({ ok: true });
+  const validator = new AIValidator(provider, { concurrency: 2, maxRetries: 0, confidenceThreshold: 0.7, log: silentLogger });
+  const hub = new Hub({ validator, log: silentLogger, allowedOrigins: null });
+  const config = loadConfig();
+  const server: Server = createHttpServer({
+    config,
+    validator,
+    log: silentLogger,
+    gameCount: () => hub.gameCount,
+    staticDir: null,
+  });
+  server.on('upgrade', (req, socket, head) => hub.handleUpgrade(req, socket as never, head));
+
+  const port = await new Promise<number>((res, rej) => {
+    server.listen(0, '127.0.0.1', () => {
+      const addr = server.address();
+      res(typeof addr === 'object' && addr ? addr.port : 0);
+    });
+    server.on('error', rej);
+  });
+  const url = `ws://127.0.0.1:${port}/ws`;
+
+  const ana = new Client(url);
+  const luis = new Client(url);
+  await ana.open();
+  await luis.open();
+
+  after(() => {
+    ana.close();
+    luis.close();
+    hub['games'].forEach((g) => g.destroy());
+    server.close();
+  });
+
+  const settings = { rounds: 1, timeLimit: 15, categories: ['Animal', 'Ciudad', 'Comida'], pointsUnique: 10, pointsShared: 5 };
+
+  // 1) Ana crea una partida y Luis se une
+  ana.send({ t: 'create', name: 'Ana', settings });
+  const joined1 = await ana.waitFor((m) => m.t === 'joined');
+  assert.equal(joined1.t, 'joined');
+  if (joined1.t !== 'joined') return;
+  const code1 = joined1.game.code;
+  luis.send({ t: 'join', code: code1, name: 'Luis' });
+  await luis.waitFor((m) => m.t === 'joined');
+
+  // 2) Ana sale de la partida (Luis sigue dentro)
+  ana.send({ t: 'leave' });
+  await new Promise((r) => setTimeout(r, 30));
+
+  // 3) Ana crea otra partida: debe funcionar, no dar "ya estás en una partida"
+  ana.send({ t: 'create', name: 'Ana', settings });
+  const joined2 = await ana.waitFor((m) => m.t === 'joined' && m.game.code !== code1);
+  assert.equal(joined2.t, 'joined');
+  if (joined2.t !== 'joined') return;
+  assert.notEqual(joined2.game.code, code1, 'debe ser una partida nueva');
+});
