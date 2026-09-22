@@ -7,6 +7,7 @@ import {
   createGame,
   EngineError,
   mergeSettings,
+  pickRoundCategories,
   validateSettings,
 } from '../src/game/engine.ts';
 
@@ -96,6 +97,77 @@ test('SET_ANSWER con categoría no válida lanza error', () => {
   assert.throws(
     () => applyEvent(s, { type: 'SET_ANSWER', playerId: host, category: 'Planeta', raw: 'Marte' }),
     (e: unknown) => e instanceof EngineError && e.code === 'category',
+  );
+});
+
+test('pickRoundCategories elige un subconjunto sin repetidos del pool', () => {
+  const pool = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
+  const settings = { ...DEFAULT_SETTINGS, categories: pool, categoriesPerRound: 4 };
+  const picked = pickRoundCategories(settings);
+  assert.equal(picked.length, 4);
+  assert.equal(new Set(picked).size, 4);
+  for (const c of picked) assert.ok(pool.includes(c));
+});
+
+test('pickRoundCategories limita al tamaño del pool', () => {
+  const settings = { ...DEFAULT_SETTINGS, categories: ['A', 'B', 'C'], categoriesPerRound: 10 };
+  const picked = pickRoundCategories(settings);
+  assert.equal(picked.length, 3);
+});
+
+test('SET_ANSWER solo acepta categorías de la ronda activa', () => {
+  let s = makeGame({ categories: ['A', 'B', 'C', 'D', 'E', 'F'], categoriesPerRound: 3 });
+  s = addPlayer(s, 'p2', 'Luis');
+  const host = hostId(s);
+  s = toPlaying(s);
+  const active = s.round?.categories ?? [];
+  assert.equal(active.length, 3);
+  const outside = ['A', 'B', 'C', 'D', 'E', 'F'].find((c) => !active.includes(c));
+  assert.ok(outside);
+  assert.throws(
+    () => applyEvent(s, { type: 'SET_ANSWER', playerId: host, category: outside, raw: 'X' }),
+    (e: unknown) => e instanceof EngineError && e.code === 'category',
+  );
+  const inside = active[0];
+  assert.ok(inside);
+  s = applyEvent(s, { type: 'SET_ANSWER', playerId: host, category: inside, raw: 'X' });
+  assert.equal(s.round?.answers.length, 1);
+});
+
+test('VOTE_LETTER cambia la letra al alcanzar la mayoría', () => {
+  let s = addPlayer(makeGame(), 'p2', 'Luis');
+  const host = hostId(s);
+  s = applyEvent(s, { type: 'OPEN_CONFIG' });
+  s = applyEvent(s, { type: 'START' });
+  assert.equal(s.phase, 'round_start');
+  const letter0 = s.round?.letter;
+  assert.ok(letter0);
+
+  s = applyEvent(s, { type: 'VOTE_LETTER', playerId: host });
+  assert.equal(s.round?.letter, letter0);
+  assert.equal(s.round?.letterVotes.length, 1);
+
+  assert.throws(
+    () => applyEvent(s, { type: 'VOTE_LETTER', playerId: host }),
+    (e: unknown) => e instanceof EngineError && e.code === 'state',
+  );
+
+  s = applyEvent(s, { type: 'VOTE_LETTER', playerId: 'p2' });
+  assert.notEqual(s.round?.letter, letter0);
+  assert.equal(s.round?.letterVotes.length, 0);
+});
+
+test('VOTE_LETTER solo durante la revelación', () => {
+  let s = addPlayer(makeGame(), 'p2', 'Luis');
+  const host = hostId(s);
+  assert.throws(
+    () => applyEvent(s, { type: 'VOTE_LETTER', playerId: host }),
+    (e: unknown) => e instanceof EngineError && e.code === 'phase',
+  );
+  s = toPlaying(s);
+  assert.throws(
+    () => applyEvent(s, { type: 'VOTE_LETTER', playerId: host }),
+    (e: unknown) => e instanceof EngineError && e.code === 'phase',
   );
 });
 
@@ -207,6 +279,8 @@ test('TIME_UP termina la ronda', () => {
 
 test('validateSettings rechaza configuraciones inválidas', () => {
   assert.throws(() => validateSettings({ ...DEFAULT_SETTINGS, categories: ['Solo', 'Dos'] }), EngineError);
+  assert.throws(() => validateSettings({ ...DEFAULT_SETTINGS, categoriesPerRound: 1 }), EngineError);
+  assert.throws(() => validateSettings({ ...DEFAULT_SETTINGS, categoriesPerRound: 99 }), EngineError);
   assert.throws(() => validateSettings({ ...DEFAULT_SETTINGS, rounds: 0 }), EngineError);
   assert.throws(() => validateSettings({ ...DEFAULT_SETTINGS, timeLimit: 5 }), EngineError);
   assert.throws(() => validateSettings({ ...DEFAULT_SETTINGS, language: 'xx' as never }), EngineError);

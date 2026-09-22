@@ -5,6 +5,7 @@ import { computeRoundPoints } from '../src/game/scoring.ts';
 
 const settings: GameSettings = {
   categories: ['Animal'],
+  categoriesPerRound: 3,
   rounds: 1,
   timeLimit: 60,
   language: 'es',

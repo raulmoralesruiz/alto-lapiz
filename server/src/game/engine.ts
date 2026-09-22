@@ -7,12 +7,15 @@ import type {
 import {
   LANGUAGES,
   MAX_CATEGORIES,
+  MAX_CATEGORIES_PER_ROUND,
   MAX_CATEGORY_LEN,
   MAX_ROUNDS,
   MAX_TIME_LIMIT,
   MIN_CATEGORIES,
+  MIN_CATEGORIES_PER_ROUND,
   MIN_TIME_LIMIT,
 } from '../../../shared/src/types.ts';
+import { randomInt } from 'node:crypto';
 import { newGameCode, newId } from '../util/id.ts';
 import { randomLetter } from './letters.ts';
 import { normalizeAnswer } from './normalize.ts';
@@ -39,6 +42,7 @@ export type GameEvent =
   | { type: 'PLAYING_START' }
   | { type: 'SET_ANSWER'; playerId: string; category: string; raw: string }
   | { type: 'PENCIL_DOWN'; playerId: string }
+  | { type: 'VOTE_LETTER'; playerId: string }
   | { type: 'TIME_UP' }
   | {
       type: 'SET_ANSWER_STATUS';
@@ -68,6 +72,13 @@ export function validateSettings(settings: GameSettings): void {
     if (seen.has(k)) throw new EngineError('settings', 'Hay categorías duplicadas');
     seen.add(k);
   }
+  if (
+    !Number.isInteger(settings.categoriesPerRound) ||
+    settings.categoriesPerRound < MIN_CATEGORIES_PER_ROUND ||
+    settings.categoriesPerRound > MAX_CATEGORIES_PER_ROUND
+  ) {
+    throw new EngineError('settings', `Categorías por ronda debe ser un entero entre ${MIN_CATEGORIES_PER_ROUND} y ${MAX_CATEGORIES_PER_ROUND}`);
+  }
   if (!Number.isInteger(settings.rounds) || settings.rounds < 1 || settings.rounds > MAX_ROUNDS) {
     throw new EngineError('settings', `Las rondas deben ser un entero entre 1 y ${MAX_ROUNDS}`);
   }
@@ -88,6 +99,7 @@ export function validateSettings(settings: GameSettings): void {
 export function mergeSettings(current: GameSettings, partial: Partial<GameSettings>): GameSettings {
   const next: GameSettings = {
     categories: partial.categories ? [...partial.categories] : [...current.categories],
+    categoriesPerRound: partial.categoriesPerRound ?? current.categoriesPerRound,
     rounds: partial.rounds ?? current.rounds,
     timeLimit: partial.timeLimit ?? current.timeLimit,
     language: (partial.language ?? current.language) as Language,
@@ -130,6 +142,17 @@ export function getRevealMs(): number {
   return 4000;
 }
 
+/** Elige aleatoriamente las categorías de la ronda a partir del pool de la partida. */
+export function pickRoundCategories(settings: GameSettings): string[] {
+  const pool = [...settings.categories];
+  const count = Math.min(settings.categoriesPerRound, pool.length);
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = randomInt(0, i + 1);
+    [pool[i], pool[j]] = [pool[j] as string, pool[i] as string];
+  }
+  return pool.slice(0, count);
+}
+
 function startRound(s: GameState, index: number): void {
   const now = Date.now();
   const revealMs = getRevealMs();
@@ -137,6 +160,8 @@ function startRound(s: GameState, index: number): void {
   s.round = {
     index,
     letter: randomLetter(s.round?.letter),
+    categories: pickRoundCategories(s.settings),
+    letterVotes: [],
     startedAt: now,
     endsAt: now + revealMs + s.settings.timeLimit * 1000,
     revealMs,
@@ -243,8 +268,8 @@ export function applyEvent(state: GameState, event: GameEvent): GameState {
       if (s.phase !== 'playing' || !s.round) throw new EngineError('phase', 'La ronda no está en juego');
       const player = findPlayer(s, event.playerId);
       if (!player) throw new EngineError('not_found', 'Jugador no encontrado');
-      if (!s.settings.categories.some((c) => c.trim().toLowerCase() === event.category.trim().toLowerCase())) {
-        throw new EngineError('category', 'Categoría no válida para esta partida');
+      if (!s.round.categories.some((c) => c.trim().toLowerCase() === event.category.trim().toLowerCase())) {
+        throw new EngineError('category', 'Categoría no válida para esta ronda');
       }
       const raw = event.raw.trim().slice(0, 60);
       const normalized = normalizeAnswer(raw);
@@ -280,6 +305,19 @@ export function applyEvent(state: GameState, event: GameEvent): GameState {
       s.phase = 'validating';
       s.round.endedBy = 'pencil_down';
       s.round.endedByPlayerId = event.playerId;
+      break;
+    }
+    case 'VOTE_LETTER': {
+      if (s.phase !== 'round_start' || !s.round) throw new EngineError('phase', 'Solo se puede votar durante la revelación de la letra');
+      const player = findPlayer(s, event.playerId);
+      if (!player) throw new EngineError('not_found', 'Jugador no encontrado');
+      if (s.round.letterVotes.includes(player.id)) throw new EngineError('state', 'Ya has votado esta letra');
+      s.round.letterVotes.push(player.id);
+      const needed = Math.floor(s.players.length / 2) + 1;
+      if (s.round.letterVotes.length >= needed) {
+        s.round.letter = randomLetter(s.round.letter);
+        s.round.letterVotes = [];
+      }
       break;
     }
     case 'TIME_UP': {

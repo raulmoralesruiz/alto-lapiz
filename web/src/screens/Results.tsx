@@ -23,7 +23,7 @@ export function Results({ game, playerId, onSend, onLeave }: ResultsProps) {
   const nameOf = (id: string) => game.players.find((p) => p.id === id)?.name ?? 'Jugador';
   const isLastRound = round.index >= game.settings.rounds;
 
-  const byCategory = game.settings.categories
+  const byCategory = round.categories
     .map((cat) => ({ cat, answers: round.answers.filter((a) => a.category === cat) }))
     .filter((g) => g.answers.length > 0);
 

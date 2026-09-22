@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { C2SMessage, GameState } from '../types.ts';
 import { MAX_ANSWER_LEN } from '../types.ts';
-import { formatSeconds, useCountdown } from '../useCountdown.ts';
+import { useNow } from '../useCountdown.ts';
 
 interface GameProps {
   game: GameState;
@@ -23,7 +23,20 @@ export function Game({ game, playerId, skewMs, onSend, onLeave }: GameProps) {
     );
   }
 
-  if (game.phase === 'round_start') return <RoundStart letter={round.letter} />;
+  if (game.phase === 'round_start') {
+    return (
+      <RoundStart
+        letter={round.letter}
+        votes={round.letterVotes.length}
+        players={game.players.length}
+        voted={round.letterVotes.includes(playerId)}
+        startedAt={round.startedAt}
+        revealMs={round.revealMs}
+        skewMs={skewMs}
+        onVote={() => onSend({ t: 'vote_letter' })}
+      />
+    );
+  }
   if (game.phase === 'validating') return <Validating onLeave={onLeave} />;
   if (game.phase !== 'playing') {
     return (
@@ -39,20 +52,80 @@ export function Game({ game, playerId, skewMs, onSend, onLeave }: GameProps) {
     <Playing
       game={game}
       playerId={playerId}
-      skewMs={skewMs}
       onSend={onSend}
       onLeave={onLeave}
     />
   );
 }
 
-function RoundStart({ letter }: { letter: string }) {
+const SPIN_MS = 1200;
+const SPIN_TICK_MS = 80;
+const randomSpinLetter = () => String.fromCharCode(65 + Math.floor(Math.random() * 26));
+
+function RoundStart({
+  letter,
+  votes,
+  players,
+  voted,
+  startedAt,
+  revealMs,
+  skewMs,
+  onVote,
+}: {
+  letter: string;
+  votes: number;
+  players: number;
+  voted: boolean;
+  startedAt: number;
+  revealMs: number;
+  skewMs: number;
+  onVote: () => void;
+}) {
+  const needed = Math.floor(players / 2) + 1;
+  const deadline = startedAt + revealMs;
+  const serverNow = useNow(true, skewMs, 100);
+  const remainingMs = Math.max(0, deadline - serverNow);
+  const seconds = Math.ceil(remainingMs / 1000);
+  const progress = revealMs > 0 ? Math.min(1, Math.max(0, remainingMs / revealMs)) : 0;
+
+  const [display, setDisplay] = useState(randomSpinLetter);
+  const [landed, setLanded] = useState(false);
+  useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setDisplay(letter);
+      setLanded(true);
+      return;
+    }
+    setLanded(false);
+    const start = Date.now();
+    const id = window.setInterval(() => {
+      if (Date.now() - start >= SPIN_MS) {
+        window.clearInterval(id);
+        setDisplay(letter);
+        setLanded(true);
+      } else {
+        setDisplay(randomSpinLetter());
+      }
+    }, SPIN_TICK_MS);
+    return () => window.clearInterval(id);
+  }, [letter]);
+
   return (
     <div className="screen game reveal">
       <div className="card center reveal-card">
         <p className="reveal-label">Preparados… la letra es</p>
-        <div className="letter">{letter}</div>
+        <div className={`letter ${landed ? 'landed' : 'spinning'}`}>{display}</div>
+        <div className="countdown" aria-live="polite">
+          <span className="countdown-num">{seconds}</span>
+          <span className="countdown-label">empieza en</span>
+        </div>
+        <div className="countdown-bar" aria-hidden>
+          <span style={{ width: `${progress * 100}%` }} />
+        </div>
         <p className="hint">¡A escribir cuando empiece el cronómetro!</p>
+        <button className="btn btn-ghost" onClick={onVote} disabled={voted}>
+          {voted ? `Votado (${votes}/${needed})` : `Cambiar letra (${votes}/${needed})`}
+        </button>
       </div>
     </div>
   );
@@ -73,10 +146,13 @@ function Validating({ onLeave }: { onLeave: () => void }) {
   );
 }
 
-function Playing({ game, playerId, skewMs, onSend, onLeave }: GameProps) {
+function Playing({ game, playerId, onSend, onLeave }: Omit<GameProps, 'skewMs'>) {
   const round = game.round;
-  const remaining = useCountdown(round?.endsAt ?? null, skewMs, true);
-  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [answers, setAnswers] = useState<Record<string, string>>(() => {
+    const init: Record<string, string> = {};
+    if (round) for (const c of round.categories) init[c] = round.letter;
+    return init;
+  });
   const pendingRef = useRef<Record<string, number>>({});
   const [pencilDown, setPencilDown] = useState(false);
 
@@ -104,17 +180,12 @@ function Playing({ game, playerId, skewMs, onSend, onLeave }: GameProps) {
     onSend({ t: 'pencil_down' });
   };
 
-  const urgent = remaining <= 10;
+  if (!round) return null;
 
   return (
     <div className="screen game">
-      <div className="game-top">
-        <div className="letter small">{round?.letter}</div>
-        <div className={`timer ${urgent ? 'urgent' : ''}`}>{formatSeconds(remaining)}</div>
-      </div>
-
       <div className="card answers">
-        {game.settings.categories.map((category) => (
+        {round.categories.map((category) => (
           <label key={category} className="answer-row">
             <span className="answer-cat">{category}</span>
             <input

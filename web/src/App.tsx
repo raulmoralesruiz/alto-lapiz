@@ -26,8 +26,21 @@ export default function App() {
   }
 
   const inGame = game.phase !== 'lobby' && game.phase !== 'configuring';
+  const inRound = game.phase === 'round_start' || game.phase === 'playing';
+  const round = game.round;
+  const voteDeadline = round ? round.startedAt + round.revealMs : null;
   const header = (
-    <Header code={game.code} connected={api.connected} aiStatus={api.aiStatus} onLeave={api.leave} />
+    <Header
+      code={game.code}
+      connected={api.connected}
+      aiStatus={api.aiStatus}
+      compact={inRound}
+      roundLetter={inRound ? (round?.letter ?? null) : null}
+      roundEndsAt={inRound ? (game.phase === 'round_start' ? voteDeadline : round?.endsAt ?? null) : null}
+      timerTitle={game.phase === 'round_start' ? 'Segundos hasta que empiece la ronda' : 'Tiempo restante de la ronda'}
+      skewMs={api.skewMs}
+      onLeave={api.leave}
+    />
   );
 
   let screen;

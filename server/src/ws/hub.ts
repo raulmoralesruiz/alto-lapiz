@@ -5,11 +5,13 @@ import {
   LANGUAGES,
   MAX_ANSWER_LEN,
   MAX_CATEGORIES,
+  MAX_CATEGORIES_PER_ROUND,
   MAX_CATEGORY_LEN,
   MAX_NAME_LEN,
   MAX_ROUNDS,
   MAX_TIME_LIMIT,
   MIN_CATEGORIES,
+  MIN_CATEGORIES_PER_ROUND,
   MIN_TIME_LIMIT,
 } from '../../../shared/src/types.ts';
 import type { AIValidator } from '../ai/validator.ts';
@@ -33,6 +35,7 @@ const CODE_RE = /^[A-Z0-9]{4,8}$/;
 
 const settingsSchema = z.object({
   categories: z.array(z.string().min(1).max(MAX_CATEGORY_LEN)).min(MIN_CATEGORIES).max(MAX_CATEGORIES),
+  categoriesPerRound: z.number().int().min(MIN_CATEGORIES_PER_ROUND).max(MAX_CATEGORIES_PER_ROUND),
   rounds: z.number().int().min(1).max(MAX_ROUNDS),
   timeLimit: z.number().int().min(MIN_TIME_LIMIT).max(MAX_TIME_LIMIT),
   language: z.enum(LANGUAGES),
@@ -69,6 +72,7 @@ const messageSchemas: Record<string, z.ZodType> = {
     category: z.string().min(1).max(MAX_CATEGORY_LEN),
     text: z.string().max(MAX_ANSWER_LEN),
   }),
+  vote_letter: z.object({ t: z.literal('vote_letter') }),
   pencil_down: z.object({ t: z.literal('pencil_down') }),
   dispute: z.object({ t: z.literal('dispute'), answerId: z.string().min(1).max(64) }),
   resolve: z.object({ t: z.literal('resolve'), answerId: z.string().min(1).max(64), valid: z.boolean() }),

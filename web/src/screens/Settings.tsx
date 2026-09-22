@@ -5,10 +5,12 @@ import {
   LANGUAGES,
   LANGUAGE_NAMES,
   MAX_CATEGORIES,
+  MAX_CATEGORIES_PER_ROUND,
   MAX_CATEGORY_LEN,
   MAX_ROUNDS,
   MAX_TIME_LIMIT,
   MIN_CATEGORIES,
+  MIN_CATEGORIES_PER_ROUND,
   MIN_TIME_LIMIT,
 } from '../types.ts';
 
@@ -130,6 +132,22 @@ export function Settings({ game, onSend, onLeave }: SettingsProps) {
         </div>
 
         <div className="settings-grid">
+          <div className="field">
+            <span>Categorías por ronda</span>
+            <input
+              className="input"
+              type="number"
+              min={MIN_CATEGORIES_PER_ROUND}
+              max={MAX_CATEGORIES_PER_ROUND}
+              value={settings.categoriesPerRound}
+              onChange={(e) =>
+                set('categoriesPerRound', clampInt(e.target.value, MIN_CATEGORIES_PER_ROUND, MAX_CATEGORIES_PER_ROUND))
+              }
+            />
+            {settings.categoriesPerRound > settings.categories.length && (
+              <p className="hint">El pool solo tiene {settings.categories.length} categorías: saldrán todas cada ronda.</p>
+            )}
+          </div>
           <div className="field">
             <span>Rondas</span>
             <input

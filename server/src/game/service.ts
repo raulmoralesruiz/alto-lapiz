@@ -174,6 +174,12 @@ export class GameService {
         this.state = applyEvent(s, { type: 'SET_ANSWER', playerId: actorId as string, category, raw: text });
         break;
       }
+      case 'vote_letter': {
+        this.requirePlayer(actorId);
+        this.state = applyEvent(s, { type: 'VOTE_LETTER', playerId: actorId as string });
+        this.deps.log.info('round.letter_vote', { code: this.code, round: s.round?.index, votes: s.round?.letterVotes.length, player: actorId });
+        break;
+      }
       case 'pencil_down': {
         this.requirePlayer(actorId);
         this.state = applyEvent(s, { type: 'PENCIL_DOWN', playerId: actorId as string });
