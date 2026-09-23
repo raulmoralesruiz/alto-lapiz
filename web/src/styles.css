@@ -54,6 +54,9 @@ body {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
+  position: sticky;
+  top: 0;
+  z-index: 20;
 }
 .header-brand {
   display: flex;
